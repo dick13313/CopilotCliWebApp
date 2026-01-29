@@ -3,7 +3,7 @@
     <header class="header">
       <h1>🤖 GitHub Copilot CLI Web Interface</h1>
       <div class="session-info">
-        <select v-model="selectedModel" class="model-select" @change="createNewSession">
+        <select v-model="selectedModel" class="model-select" @change="handleModelChange">
           <option value="claude-sonnet-4.5">Claude Sonnet 4.5 (預設)</option>
           <option value="claude-sonnet-4">Claude Sonnet 4</option>
           <option value="gpt-4.1">GPT-4.1</option>
@@ -11,6 +11,7 @@
           <option value="claude-haiku-4.5">Claude Haiku 4.5</option>
         </select>
         <button @click="createNewSession" class="new-session-btn">新對話</button>
+        <span v-if="sessionId" class="session-indicator">✓ 已連接</span>
       </div>
     </header>
 
@@ -88,18 +89,46 @@ export default {
     const createNewSession = async () => {
       try {
         error.value = '';
+        isLoading.value = true;
         const response = await copilotService.createSession(selectedModel.value);
         sessionId.value = response.sessionId;
         messages.value = [];
-        console.log('Session created:', sessionId.value);
+        console.log('Session created:', sessionId.value, 'Model:', selectedModel.value);
       } catch (err) {
         error.value = '無法建立會話: ' + err.message;
         console.error('Create session error:', err);
+      } finally {
+        isLoading.value = false;
       }
+    };
+
+    const handleModelChange = async () => {
+      // 切換模型時保留當前對話，創建新 session
+      console.log('Model changed to:', selectedModel.value);
+      
+      // 顯示提示訊息
+      if (messages.value.length > 0) {
+        const confirmChange = confirm(
+          `切換到 ${selectedModel.value} 將開始新對話。\n當前對話將被清除，確定要繼續嗎？`
+        );
+        if (!confirmChange) {
+          // 恢復原來的模型選擇（需要保存舊值）
+          return;
+        }
+      }
+      
+      await createNewSession();
     };
 
     const handleSend = async () => {
       if (!inputMessage.value.trim() || isLoading.value) return;
+
+      // 確保有 session
+      if (!sessionId.value) {
+        error.value = '會話未初始化，請稍候...';
+        await createNewSession();
+        if (!sessionId.value) return;
+      }
 
       const userMessage = inputMessage.value.trim();
       inputMessage.value = '';
@@ -115,6 +144,7 @@ export default {
       error.value = '';
 
       try {
+        console.log('Sending message to session:', sessionId.value);
         const response = await copilotService.sendMessage(sessionId.value, userMessage);
         
         messages.value.push({
@@ -124,9 +154,16 @@ export default {
         });
         
         scrollToBottom();
+        console.log('Message sent successfully');
       } catch (err) {
         error.value = '發送失敗: ' + err.message;
         console.error('Send message error:', err);
+        
+        // 如果是 session 不存在的錯誤，嘗試重新建立
+        if (err.message.includes('not found')) {
+          error.value += ' - 正在重新建立會話...';
+          await createNewSession();
+        }
       } finally {
         isLoading.value = false;
       }
@@ -149,8 +186,10 @@ export default {
       error,
       selectedModel,
       messagesContainer,
+      sessionId,
       handleSend,
       createNewSession,
+      handleModelChange,
       formatTime
     };
   }
@@ -199,6 +238,15 @@ export default {
   color: white;
   border-radius: 4px;
   font-size: 0.9rem;
+}
+
+.session-indicator {
+  color: #16825d;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  background: rgba(22, 130, 93, 0.1);
+  border-radius: 4px;
 }
 
 .messages-container {

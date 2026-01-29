@@ -8,6 +8,7 @@ public class CopilotService : IDisposable
 {
     private CopilotClient? _client;
     private readonly ConcurrentDictionary<string, CopilotSession> _sessions = new();
+    private readonly ConcurrentDictionary<string, IDisposable> _eventSubscriptions = new();
     private readonly ILogger<CopilotService> _logger;
 
     public CopilotService(ILogger<CopilotService> logger)
@@ -61,38 +62,63 @@ public class CopilotService : IDisposable
 
         var messages = new List<ChatMessage>();
         var completionSource = new TaskCompletionSource<bool>();
-        var currentContent = new System.Text.StringBuilder();
 
-        session.On(evt =>
+        // 清理舊的事件訂閱
+        if (_eventSubscriptions.TryRemove(sessionId, out var oldSubscription))
         {
-            switch (evt)
+            oldSubscription?.Dispose();
+        }
+
+        // 創建新的事件訂閱
+        var subscription = session.On(evt =>
+        {
+            try
             {
-                case AssistantMessageDeltaEvent delta:
-                    currentContent.Append(delta.Data.DeltaContent);
-                    break;
+                switch (evt)
+                {
+                    case AssistantMessageDeltaEvent delta:
+                        // 串流增量內容（可選）
+                        break;
 
-                case AssistantMessageEvent msg:
-                    messages.Add(new ChatMessage
-                    {
-                        Role = "assistant",
-                        Content = msg.Data.Content,
-                        Timestamp = DateTime.UtcNow
-                    });
-                    break;
+                    case AssistantMessageEvent msg:
+                        messages.Add(new ChatMessage
+                        {
+                            Role = "assistant",
+                            Content = msg.Data.Content,
+                            Timestamp = DateTime.UtcNow
+                        });
+                        break;
 
-                case SessionIdleEvent:
-                    completionSource.SetResult(true);
-                    break;
+                    case SessionIdleEvent:
+                        completionSource.TrySetResult(true);
+                        break;
 
-                case SessionErrorEvent err:
-                    _logger.LogError("Session error: {Message}", err.Data.Message);
-                    completionSource.SetException(new Exception(err.Data.Message));
-                    break;
+                    case SessionErrorEvent err:
+                        _logger.LogError("Session error: {Message}", err.Data.Message);
+                        completionSource.TrySetException(new Exception(err.Data.Message));
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in event handler");
+                completionSource.TrySetException(ex);
             }
         });
 
-        await session.SendAsync(new MessageOptions { Prompt = prompt });
-        await completionSource.Task;
+        // 保存訂閱以便後續清理
+        _eventSubscriptions[sessionId] = subscription;
+
+        try
+        {
+            await session.SendAsync(new MessageOptions { Prompt = prompt });
+            await completionSource.Task;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending message");
+            throw;
+        }
 
         return messages;
     }
@@ -104,6 +130,13 @@ public class CopilotService : IDisposable
 
     public async Task DeleteSessionAsync(string sessionId)
     {
+        // 清理事件訂閱
+        if (_eventSubscriptions.TryRemove(sessionId, out var subscription))
+        {
+            subscription?.Dispose();
+        }
+
+        // 刪除 session
         if (_sessions.TryRemove(sessionId, out var session))
         {
             await session.DisposeAsync();
@@ -113,12 +146,21 @@ public class CopilotService : IDisposable
 
     public void Dispose()
     {
+        // 清理所有事件訂閱
+        foreach (var subscription in _eventSubscriptions.Values)
+        {
+            subscription?.Dispose();
+        }
+        _eventSubscriptions.Clear();
+
+        // 清理所有 session
         foreach (var session in _sessions.Values)
         {
             session.DisposeAsync().AsTask().Wait();
         }
         _sessions.Clear();
 
+        // 停止 client
         _client?.StopAsync().Wait();
         _client?.Dispose();
     }
