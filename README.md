@@ -250,8 +250,10 @@ npm run preview
 - [⚡ 快速開始 (QUICKSTART.md)](./QUICKSTART.md) - 5 分鐘快速上手
 - [📖 開發者指南 (PROJECT_GUIDE.md)](./PROJECT_GUIDE.md) - 完整開發說明
 - [🔧 故障排除 (TROUBLESHOOTING.md)](./TROUBLESHOOTING.md) - 問題解決方案
-- [📝 修正摘要 (FIX_SUMMARY.md)](./FIX_SUMMARY.md) - 問題修正記錄
+- [📝 修正摘要 (FIX_SUMMARY.md)](./FIX_SUMMARY.md) - 模型命名修正記錄
+- [🔄 連續性修正 (FIX_CONTINUITY.md)](./FIX_CONTINUITY.md) - 對話連續性問題修正
 - [📁 檔案清單 (FILE_LIST.md)](./FILE_LIST.md) - 完整檔案結構
+- [🚀 Git 推送指南 (GIT_PUSH_GUIDE.md)](./GIT_PUSH_GUIDE.md) - Git 使用說明
 
 ### 官方資源
 
