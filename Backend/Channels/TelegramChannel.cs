@@ -1,9 +1,11 @@
 using CopilotApi.Options;
 using CopilotApi.Services;
+using GitHub.Copilot.SDK;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
 using System.IO;
 using System.Text.Json.Serialization;
 
@@ -133,7 +135,30 @@ public class TelegramChannel : IChatChannel
             finalPrompt = string.IsNullOrWhiteSpace(caption) ? "Describe this image" : caption;
         }
 
-        var responseMessages = await _copilotService.SendMessageAsync(sessionId, finalPrompt!);
+        List<UserMessageDataAttachmentsItem>? attachments = null;
+        if (hasPhoto)
+        {
+            var photo = update.Message.Photo?.OrderByDescending(p => p.FileSize ?? 0).FirstOrDefault();
+            if (photo == null)
+            {
+                var fallbackMessages = await _copilotService.SendMessageAsync(sessionId, finalPrompt!);
+                var fallbackReply = fallbackMessages.LastOrDefault()?.Content ?? "(no response)";
+                await SendMessageAsync(chatId, fallbackReply, cancellationToken);
+                return;
+            }
+            var filePath = await DownloadTelegramFileAsync(photo.FileId, cancellationToken);
+            attachments = new List<UserMessageDataAttachmentsItem>
+            {
+                new UserMessageDataAttachmentsItemFile
+                {
+                    Type = "file",
+                    Path = filePath,
+                    DisplayName = Path.GetFileName(filePath)
+                }
+            };
+        }
+
+        var responseMessages = await _copilotService.SendMessageAsync(sessionId, finalPrompt!, attachments);
         var replyMessage = responseMessages.LastOrDefault()?.Content ?? "(no response)";
 
         await SendMessageAsync(chatId, replyMessage, cancellationToken);

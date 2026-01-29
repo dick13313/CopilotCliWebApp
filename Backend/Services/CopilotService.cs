@@ -63,7 +63,7 @@ public class CopilotService : IDisposable
         return session.SessionId;
     }
 
-    public async Task<List<ChatMessage>> SendMessageAsync(string sessionId, string prompt)
+    public async Task<List<ChatMessage>> SendMessageAsync(string sessionId, string prompt, List<UserMessageDataAttachmentsItem>? attachments = null)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
         {
@@ -121,7 +121,13 @@ public class CopilotService : IDisposable
 
         try
         {
-            await session.SendAsync(new MessageOptions { Prompt = prompt });
+            var messageOptions = new MessageOptions { Prompt = prompt };
+        if (attachments is { Count: > 0 })
+        {
+            messageOptions.Attachments = attachments;
+        }
+
+        await session.SendAsync(messageOptions);
             await completionSource.Task;
         }
         catch (Exception ex)
