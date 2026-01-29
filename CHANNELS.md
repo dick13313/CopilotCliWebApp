@@ -121,3 +121,17 @@ builder.Services.AddSingleton<IChatChannel, DiscordChannel>();
 ---
 
 如需擴充其他通訊軟體，請依照上述模式新增通道類別與設定。
+
+## 🗂️ Copilot CLI 預設目錄
+
+如果你希望 Copilot CLI 使用指定工作目錄，可在 `appsettings.json` 設定：
+
+```json
+{
+  "CopilotCli": {
+    "WorkingDirectory": "C:\\Projects\\MyWorkspace"
+  }
+}
+```
+
+> Linux/Mac 範例：`/home/user/projects`

@@ -1,5 +1,7 @@
 using GitHub.Copilot.SDK;
 using CopilotApi.Models;
+using CopilotApi.Options;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 
 namespace CopilotApi.Services;
@@ -10,10 +12,12 @@ public class CopilotService : IDisposable
     private readonly ConcurrentDictionary<string, CopilotSession> _sessions = new();
     private readonly ConcurrentDictionary<string, IDisposable> _eventSubscriptions = new();
     private readonly ILogger<CopilotService> _logger;
+    private readonly CopilotCliOptions _cliOptions;
 
-    public CopilotService(ILogger<CopilotService> logger)
+    public CopilotService(ILogger<CopilotService> logger, IOptions<CopilotCliOptions> cliOptions)
     {
         _logger = logger;
+        _cliOptions = cliOptions.Value;
     }
 
     public async Task InitializeAsync()
@@ -22,7 +26,13 @@ public class CopilotService : IDisposable
         {
             try
             {
-                _client = new CopilotClient();
+                var clientOptions = new CopilotClientOptions();
+                if (!string.IsNullOrWhiteSpace(_cliOptions.WorkingDirectory))
+                {
+                    clientOptions.Cwd = _cliOptions.WorkingDirectory;
+                }
+
+                _client = new CopilotClient(clientOptions);
                 await _client.StartAsync();
                 _logger.LogInformation("Copilot CLI client started successfully");
             }

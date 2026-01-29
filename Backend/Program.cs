@@ -11,6 +11,7 @@ builder.Services.AddHttpClient();
 
 // Options
 builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection(TelegramOptions.SectionName));
+builder.Services.Configure<CopilotCliOptions>(builder.Configuration.GetSection(CopilotCliOptions.SectionName));
 
 // Add CORS
 builder.Services.AddCors(options =>

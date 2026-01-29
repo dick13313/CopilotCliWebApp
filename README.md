@@ -180,6 +180,20 @@ const API_BASE_URL = 'http://your-api-url/api';
 }
 ```
 
+### Copilot CLI 預設工作目錄設定
+
+如果你希望 Copilot CLI 在指定目錄執行，請在 `appsettings.json` 設定：
+
+```json
+{
+  "CopilotCli": {
+    "WorkingDirectory": "C:\\Projects\\MyWorkspace"
+  }
+}
+```
+
+> Linux/Mac 範例：`/home/user/projects`
+
 **取得 Bot Token 步驟：**
 1. 在 Telegram 搜尋 `@BotFather`
 2. 執行 `/newbot`
