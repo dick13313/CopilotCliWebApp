@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CopilotApi.Channels;
 
@@ -16,6 +17,10 @@ public class TelegramChannel : IChatChannel
     private readonly Dictionary<long, string> _chatSessions = new();
     private CancellationTokenSource? _cts;
     private long _lastUpdateId;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     public string Name => "telegram";
 
@@ -84,7 +89,7 @@ public class TelegramChannel : IChatChannel
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var result = JsonSerializer.Deserialize<TelegramResponse<List<TelegramUpdate>>>(json);
+        var result = JsonSerializer.Deserialize<TelegramResponse<List<TelegramUpdate>>>(json, JsonOptions);
         return result?.Result ?? new List<TelegramUpdate>();
     }
 
@@ -144,24 +149,34 @@ public class TelegramChannel : IChatChannel
 
     private sealed class TelegramResponse<T>
     {
+        [JsonPropertyName("ok")]
         public bool Ok { get; set; }
+
+        [JsonPropertyName("result")]
         public T? Result { get; set; }
     }
 
     private sealed class TelegramUpdate
     {
+        [JsonPropertyName("update_id")]
         public long UpdateId { get; set; }
+
+        [JsonPropertyName("message")]
         public TelegramMessage? Message { get; set; }
     }
 
     private sealed class TelegramMessage
     {
+        [JsonPropertyName("text")]
         public string? Text { get; set; }
+
+        [JsonPropertyName("chat")]
         public TelegramChat Chat { get; set; } = new();
     }
 
     private sealed class TelegramChat
     {
+        [JsonPropertyName("id")]
         public long Id { get; set; }
     }
 }
