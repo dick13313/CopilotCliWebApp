@@ -1,0 +1,376 @@
+<template>
+  <div class="chat-container">
+    <header class="header">
+      <h1>🤖 GitHub Copilot CLI Web Interface</h1>
+      <div class="session-info">
+        <select v-model="selectedModel" class="model-select" @change="createNewSession">
+          <option value="claude-sonnet-4.5">Claude Sonnet 4.5 (預設)</option>
+          <option value="claude-sonnet-4">Claude Sonnet 4</option>
+          <option value="gpt-4.1">GPT-4.1</option>
+          <option value="gpt-5-mini">GPT-5 Mini</option>
+          <option value="claude-haiku-4.5">Claude Haiku 4.5</option>
+        </select>
+        <button @click="createNewSession" class="new-session-btn">新對話</button>
+      </div>
+    </header>
+
+    <div class="messages-container" ref="messagesContainer">
+      <div v-if="messages.length === 0" class="welcome-message">
+        <h2>👋 歡迎使用 Copilot CLI</h2>
+        <p>輸入您的問題，開始與 AI 助手對話</p>
+      </div>
+      
+      <div v-for="(msg, index) in messages" :key="index" class="message" :class="msg.role">
+        <div class="message-header">
+          <span class="role-badge">{{ msg.role === 'user' ? '👤 您' : '🤖 Copilot' }}</span>
+          <span class="timestamp">{{ formatTime(msg.timestamp) }}</span>
+        </div>
+        <div class="message-content">{{ msg.content }}</div>
+      </div>
+
+      <div v-if="isLoading" class="message assistant loading">
+        <div class="message-header">
+          <span class="role-badge">🤖 Copilot</span>
+        </div>
+        <div class="message-content">
+          <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-container">
+      <div v-if="error" class="error-message">
+        ❌ {{ error }}
+      </div>
+      <div class="input-wrapper">
+        <textarea
+          v-model="inputMessage"
+          @keydown.enter.prevent="handleSend"
+          placeholder="輸入訊息... (Enter 發送)"
+          class="message-input"
+          rows="3"
+        ></textarea>
+        <button @click="handleSend" :disabled="!inputMessage.trim() || isLoading" class="send-btn">
+          📤 發送
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, onMounted, nextTick } from 'vue';
+import { copilotService } from '../services/copilotService.js';
+
+export default {
+  name: 'ChatInterface',
+  setup() {
+    const messages = ref([]);
+    const inputMessage = ref('');
+    const isLoading = ref(false);
+    const error = ref('');
+    const sessionId = ref('');
+    const selectedModel = ref('claude-sonnet-4.5');
+    const messagesContainer = ref(null);
+
+    const scrollToBottom = () => {
+      nextTick(() => {
+        if (messagesContainer.value) {
+          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+        }
+      });
+    };
+
+    const createNewSession = async () => {
+      try {
+        error.value = '';
+        const response = await copilotService.createSession(selectedModel.value);
+        sessionId.value = response.sessionId;
+        messages.value = [];
+        console.log('Session created:', sessionId.value);
+      } catch (err) {
+        error.value = '無法建立會話: ' + err.message;
+        console.error('Create session error:', err);
+      }
+    };
+
+    const handleSend = async () => {
+      if (!inputMessage.value.trim() || isLoading.value) return;
+
+      const userMessage = inputMessage.value.trim();
+      inputMessage.value = '';
+
+      messages.value.push({
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date()
+      });
+
+      scrollToBottom();
+      isLoading.value = true;
+      error.value = '';
+
+      try {
+        const response = await copilotService.sendMessage(sessionId.value, userMessage);
+        
+        messages.value.push({
+          role: 'assistant',
+          content: response.content,
+          timestamp: new Date()
+        });
+        
+        scrollToBottom();
+      } catch (err) {
+        error.value = '發送失敗: ' + err.message;
+        console.error('Send message error:', err);
+      } finally {
+        isLoading.value = false;
+      }
+    };
+
+    const formatTime = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    onMounted(() => {
+      createNewSession();
+    });
+
+    return {
+      messages,
+      inputMessage,
+      isLoading,
+      error,
+      selectedModel,
+      messagesContainer,
+      handleSend,
+      createNewSession,
+      formatTime
+    };
+  }
+};
+</script>
+
+<style scoped>
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #252526;
+}
+
+.header {
+  padding: 1rem 2rem;
+  background: #2d2d30;
+  border-bottom: 1px solid #3e3e42;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  color: #e4e4e4;
+}
+
+.session-info {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.model-select {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.new-session-btn {
+  padding: 0.5rem 1.5rem;
+  background: #0078d4;
+  color: white;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.welcome-message {
+  text-align: center;
+  margin-top: 4rem;
+}
+
+.welcome-message h2 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: #e4e4e4;
+}
+
+.welcome-message p {
+  color: #999;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 80%;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message.user {
+  align-self: flex-end;
+}
+
+.message.assistant {
+  align-self: flex-start;
+}
+
+.message-header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.role-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.message.user .role-badge {
+  background: #0078d4;
+  color: white;
+}
+
+.message.assistant .role-badge {
+  background: #16825d;
+  color: white;
+}
+
+.timestamp {
+  color: #999;
+  font-size: 0.75rem;
+}
+
+.message-content {
+  padding: 1rem;
+  border-radius: 8px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.message.user .message-content {
+  background: #094771;
+  color: #e4e4e4;
+}
+
+.message.assistant .message-content {
+  background: #1a1a1a;
+  color: #e4e4e4;
+  border: 1px solid #3e3e42;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #999;
+  animation: typing 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.input-container {
+  padding: 1rem 2rem 2rem;
+  background: #2d2d30;
+  border-top: 1px solid #3e3e42;
+}
+
+.error-message {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #5a1d1d;
+  color: #f48771;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.input-wrapper {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.message-input {
+  flex: 1;
+  padding: 0.75rem;
+  border-radius: 4px;
+  resize: vertical;
+  min-height: 60px;
+  font-size: 1rem;
+}
+
+.send-btn {
+  padding: 0.75rem 2rem;
+  background: #0078d4;
+  color: white;
+  border-radius: 4px;
+  font-size: 1rem;
+  height: 60px;
+}
+
+.send-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+</style>

@@ -1,0 +1,6 @@
+@CopilotApi_HostAddress = http://localhost:5056
+
+GET {{CopilotApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
