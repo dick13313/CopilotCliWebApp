@@ -10,6 +10,7 @@
 
 - ✅ 與 GitHub Copilot CLI 完整整合
 - 💬 即時聊天介面
+- 🔌 多通訊軟體通道擴充（Telegram 已實作）
 - 🎨 現代化 UI 設計
 - 🔄 支援多個 AI 模型切換 (Claude Sonnet 4.5, Claude Sonnet 4, GPT-4.1, Claude Haiku 4.5)
 - 📱 響應式設計
@@ -107,8 +108,16 @@ npm run dev
 |--------|----------|-------------|
 | POST | `/api/chat/session` | 建立新的對話會話 |
 | POST | `/api/chat/send` | 發送訊息 |
+| POST | `/api/chat/model` | 切換模型（同一會話） |
 | GET | `/api/chat/sessions` | 取得所有活動會話 |
 | DELETE | `/api/chat/session/{id}` | 刪除會話 |
+
+### Channel Controller
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/channel` | 取得所有通訊通道狀態 |
+| GET | `/api/channel/telegram` | 取得 Telegram 設定 |
 
 ### 請求範例
 
@@ -156,6 +165,30 @@ const API_BASE_URL = 'http://your-api-url/api';
 ### 修改後端埠號
 
 編輯 `Backend/Properties/launchSettings.json` 或在 `Program.cs` 中設定。
+
+### Telegram Bot 設定
+
+編輯 `Backend/appsettings.json`：
+
+```json
+{
+  "Telegram": {
+    "BotToken": "YOUR_BOT_TOKEN",
+    "AllowedChatId": 123456789,
+    "DefaultModel": "claude-sonnet-4.5"
+  }
+}
+```
+
+**取得 Bot Token 步驟：**
+1. 在 Telegram 搜尋 `@BotFather`
+2. 執行 `/newbot`
+3. 取得 Bot Token
+
+**AllowedChatId 取得方式：**
+1. 與 Bot 對話
+2. 查看後端日誌輸出的 chatId
+3. 填入 appsettings.json
 
 ### 選擇預設模型
 
@@ -254,6 +287,7 @@ npm run preview
 - [🔄 連續性修正 (FIX_CONTINUITY.md)](./FIX_CONTINUITY.md) - 對話連續性問題修正
 - [📁 檔案清單 (FILE_LIST.md)](./FILE_LIST.md) - 完整檔案結構
 - [🚀 Git 推送指南 (GIT_PUSH_GUIDE.md)](./GIT_PUSH_GUIDE.md) - Git 使用說明
+- [📡 通訊軟體整合 (CHANNELS.md)](./CHANNELS.md) - 通訊通道整合說明
 
 ### 官方資源
 

@@ -76,6 +76,7 @@ export default {
     const error = ref('');
     const sessionId = ref('');
     const selectedModel = ref('claude-sonnet-4.5');
+    const previousModel = ref('claude-sonnet-4.5');
     const messagesContainer = ref(null);
 
     const scrollToBottom = () => {
@@ -92,6 +93,7 @@ export default {
         isLoading.value = true;
         const response = await copilotService.createSession(selectedModel.value);
         sessionId.value = response.sessionId;
+        previousModel.value = selectedModel.value;
         messages.value = [];
         console.log('Session created:', sessionId.value, 'Model:', selectedModel.value);
       } catch (err) {
@@ -103,21 +105,24 @@ export default {
     };
 
     const handleModelChange = async () => {
-      // 切換模型時保留當前對話，創建新 session
-      console.log('Model changed to:', selectedModel.value);
-      
-      // 顯示提示訊息
-      if (messages.value.length > 0) {
-        const confirmChange = confirm(
-          `切換到 ${selectedModel.value} 將開始新對話。\n當前對話將被清除，確定要繼續嗎？`
-        );
-        if (!confirmChange) {
-          // 恢復原來的模型選擇（需要保存舊值）
-          return;
-        }
+      if (!sessionId.value) {
+        await createNewSession();
+        return;
       }
-      
-      await createNewSession();
+
+      try {
+        error.value = '';
+        isLoading.value = true;
+        await copilotService.switchModel(sessionId.value, selectedModel.value);
+        previousModel.value = selectedModel.value;
+        console.log('Model switched in current session:', selectedModel.value);
+      } catch (err) {
+        error.value = '切換模型失敗: ' + err.message;
+        selectedModel.value = previousModel.value;
+        console.error('Switch model error:', err);
+      } finally {
+        isLoading.value = false;
+      }
     };
 
     const handleSend = async () => {

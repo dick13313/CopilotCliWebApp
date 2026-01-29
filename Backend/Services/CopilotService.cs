@@ -123,6 +123,22 @@ public class CopilotService : IDisposable
         return messages;
     }
 
+    public async Task UpdateSessionModelAsync(string sessionId, string model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            throw new ArgumentException("Model is required", nameof(model));
+        }
+
+        if (!_sessions.TryGetValue(sessionId, out _))
+        {
+            throw new InvalidOperationException($"Session {sessionId} not found");
+        }
+
+        await SendMessageAsync(sessionId, $"/model {model}");
+        _logger.LogInformation("Session {SessionId} switched model to {Model}", sessionId, model);
+    }
+
     public List<string> GetActiveSessions()
     {
         return _sessions.Keys.ToList();

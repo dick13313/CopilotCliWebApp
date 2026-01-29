@@ -73,6 +73,35 @@ public class ChatController : ControllerBase
         }
     }
 
+    [HttpPost("model")]
+    public async Task<ActionResult> SwitchModel([FromBody] ChatRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.SessionId))
+            {
+                return BadRequest(new { error = "SessionId is required" });
+            }
+
+            if (string.IsNullOrEmpty(request.Model))
+            {
+                return BadRequest(new { error = "Model is required" });
+            }
+
+            await _copilotService.UpdateSessionModelAsync(request.SessionId, request.Model);
+            return Ok(new { message = "Model switched successfully", model = request.Model });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to switch model");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     [HttpGet("sessions")]
     public ActionResult<List<string>> GetSessions()
     {

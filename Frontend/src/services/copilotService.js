@@ -16,6 +16,14 @@ export const copilotService = {
     return response.data;
   },
 
+  async switchModel(sessionId, model) {
+    const response = await axios.post(`${API_BASE_URL}/chat/model`, {
+      sessionId,
+      model
+    });
+    return response.data;
+  },
+
   async getSessions() {
     const response = await axios.get(`${API_BASE_URL}/chat/sessions`);
     return response.data;
@@ -23,6 +31,16 @@ export const copilotService = {
 
   async deleteSession(sessionId) {
     const response = await axios.delete(`${API_BASE_URL}/chat/session/${sessionId}`);
+    return response.data;
+  },
+
+  async getChannels() {
+    const response = await axios.get(`${API_BASE_URL}/channel`);
+    return response.data;
+  },
+
+  async getTelegramSettings() {
+    const response = await axios.get(`${API_BASE_URL}/channel/telegram`);
     return response.data;
   }
 };

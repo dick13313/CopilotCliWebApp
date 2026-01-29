@@ -1,10 +1,16 @@
 using CopilotApi.Services;
+using CopilotApi.Channels;
+using CopilotApi.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.AddHttpClient();
+
+// Options
+builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection(TelegramOptions.SectionName));
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -19,6 +25,8 @@ builder.Services.AddCors(options =>
 
 // Register Copilot Service as singleton
 builder.Services.AddSingleton<CopilotService>();
+builder.Services.AddSingleton<IChatChannel, TelegramChannel>();
+builder.Services.AddHostedService<ChannelService>();
 
 var app = builder.Build();
 
