@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.IO;
 using System.Text.Json.Serialization;
 
 namespace CopilotApi.Channels;
@@ -95,7 +96,7 @@ public class TelegramChannel : IChatChannel
 
     private async Task HandleUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken)
     {
-        if (update.Message?.Text == null)
+        if (update.Message == null)
         {
             return;
         }
@@ -107,19 +108,35 @@ public class TelegramChannel : IChatChannel
             return;
         }
 
-        var prompt = update.Message.Text.Trim();
-        if (string.IsNullOrWhiteSpace(prompt))
+        var prompt = update.Message.Text?.Trim();
+        var caption = update.Message.Caption?.Trim();
+        var hasPhoto = update.Message.Photo != null && update.Message.Photo.Count > 0;
+
+        if (string.IsNullOrWhiteSpace(prompt) && !hasPhoto)
         {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt) && prompt.StartsWith("/model", StringComparison.OrdinalIgnoreCase))
+        {
+            var reply = await HandleModelSwitchAsync(chatId, prompt);
+            await SendMessageAsync(chatId, reply, cancellationToken);
             return;
         }
 
         var sessionId = await GetOrCreateSessionAsync(chatId);
         _logger.LogInformation("Telegram message received from {ChatId} in session {SessionId}", chatId, sessionId);
 
-        var responseMessages = await _copilotService.SendMessageAsync(sessionId, prompt);
-        var reply = responseMessages.LastOrDefault()?.Content ?? "(no response)";
+        var finalPrompt = prompt;
+        if (hasPhoto && string.IsNullOrWhiteSpace(finalPrompt))
+        {
+            finalPrompt = string.IsNullOrWhiteSpace(caption) ? "Describe this image" : caption;
+        }
 
-        await SendMessageAsync(chatId, reply, cancellationToken);
+        var responseMessages = await _copilotService.SendMessageAsync(sessionId, finalPrompt!);
+        var replyMessage = responseMessages.LastOrDefault()?.Content ?? "(no response)";
+
+        await SendMessageAsync(chatId, replyMessage, cancellationToken);
     }
 
     private async Task<string> GetOrCreateSessionAsync(long chatId)
@@ -147,6 +164,50 @@ public class TelegramChannel : IChatChannel
         response.EnsureSuccessStatusCode();
     }
 
+    private async Task<string> DownloadTelegramFileAsync(string fileId, CancellationToken cancellationToken)
+    {
+        var fileUrl = $"https://api.telegram.org/bot{_options.BotToken}/getFile?file_id={fileId}";
+        using var fileResponse = await _httpClient.GetAsync(fileUrl, cancellationToken);
+        fileResponse.EnsureSuccessStatusCode();
+
+        var fileJson = await fileResponse.Content.ReadAsStringAsync(cancellationToken);
+        var fileResult = JsonSerializer.Deserialize<TelegramResponse<TelegramFileResponse>>(fileJson, JsonOptions);
+        var filePath = fileResult?.Result?.FilePath;
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new InvalidOperationException("Telegram file path not found");
+        }
+
+        var downloadUrl = $"https://api.telegram.org/file/bot{_options.BotToken}/{filePath}";
+        using var downloadResponse = await _httpClient.GetAsync(downloadUrl, cancellationToken);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        var tempFile = Path.Combine(Path.GetTempPath(), $"telegram_{Guid.NewGuid()}_{Path.GetFileName(filePath)}");
+        await using var fs = File.OpenWrite(tempFile);
+        await downloadResponse.Content.CopyToAsync(fs, cancellationToken);
+        return tempFile;
+    }
+
+    private async Task<string> HandleModelSwitchAsync(long chatId, string prompt)
+    {
+        var parts = prompt.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return "使用方式: /model <model-name>";
+        }
+
+        var model = parts[1].Trim();
+        var sessionId = await GetOrCreateSessionAsync(chatId);
+        await _copilotService.UpdateSessionModelAsync(sessionId, model);
+        return $"模型已切換為: {model}";
+    }
+
+    private sealed class TelegramFileResponse
+    {
+        [JsonPropertyName("file_path")]
+        public string? FilePath { get; set; }
+    }
+
     private sealed class TelegramResponse<T>
     {
         [JsonPropertyName("ok")]
@@ -170,8 +231,23 @@ public class TelegramChannel : IChatChannel
         [JsonPropertyName("text")]
         public string? Text { get; set; }
 
+        [JsonPropertyName("caption")]
+        public string? Caption { get; set; }
+
+        [JsonPropertyName("photo")]
+        public List<TelegramPhoto> Photo { get; set; } = new();
+
         [JsonPropertyName("chat")]
         public TelegramChat Chat { get; set; } = new();
+    }
+
+    private sealed class TelegramPhoto
+    {
+        [JsonPropertyName("file_id")]
+        public string FileId { get; set; } = string.Empty;
+
+        [JsonPropertyName("file_size")]
+        public int? FileSize { get; set; }
     }
 
     private sealed class TelegramChat
