@@ -110,6 +110,9 @@ npm run dev
 | POST | `/api/chat/send` | 發送訊息 |
 | POST | `/api/chat/model` | 切換模型（同一會話） |
 | GET | `/api/chat/sessions` | 取得所有活動會話 |
+| GET | `/api/chat/sessions/status` | 取得所有會話狀態 |
+| GET | `/api/chat/session/{id}` | 取得指定會話狀態 |
+| POST | `/api/chat/batch` | 批次指派任務給多個會話 |
 | DELETE | `/api/chat/session/{id}` | 刪除會話 |
 
 ### Channel Controller
@@ -147,6 +150,7 @@ POST /api/chat/send
 - 輸入框
 - 模型選擇器
 - 新對話按鈕
+- Session 列表（切換/刪除/狀態）
 
 ### copilotService.js
 

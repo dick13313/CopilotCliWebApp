@@ -34,7 +34,8 @@ public class DirectoryController : ControllerBase
                 return BadRequest(new { error = "Working directory not configured or does not exist" });
             }
 
-            var directories = Directory.GetDirectories(baseDir)
+            var fullBaseDir = Path.GetFullPath(baseDir);
+            var directories = Directory.GetDirectories(fullBaseDir)
                 .Select(d => new DirectoryInfo(d))
                 .Where(d => !d.Name.StartsWith("."))
                 .Select(d => new DirectoryItem
@@ -47,7 +48,7 @@ public class DirectoryController : ControllerBase
 
             return Ok(new DirectoryListResponse
             {
-                BaseDirectory = baseDir,
+                BaseDirectory = fullBaseDir,
                 CurrentDirectory = _copilotService.GetCurrentDirectory(),
                 Directories = directories
             });
@@ -68,7 +69,7 @@ public class DirectoryController : ControllerBase
             return Ok(new CurrentDirectoryResponse
             {
                 CurrentDirectory = currentDir,
-                BaseDirectory = _cliOptions.WorkingDirectory
+                BaseDirectory = _cliOptions.WorkingDirectory ?? string.Empty
             });
         }
         catch (Exception ex)
@@ -91,6 +92,21 @@ public class DirectoryController : ControllerBase
             if (!Directory.Exists(request.DirectoryPath))
             {
                 return BadRequest(new { error = "Directory does not exist" });
+            }
+
+            var baseDir = _cliOptions.WorkingDirectory;
+            if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+            {
+                return BadRequest(new { error = "Working directory not configured or does not exist" });
+            }
+
+            var fullBaseDir = Path.GetFullPath(baseDir)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var fullTarget = Path.GetFullPath(request.DirectoryPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!fullTarget.StartsWith(fullBaseDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { error = "Directory must be under working directory" });
             }
 
             await _copilotService.SwitchDirectoryAsync(request.DirectoryPath);

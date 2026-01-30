@@ -22,54 +22,86 @@
           <option value="claude-haiku-4.5">Claude Haiku 4.5</option>
         </select>
         <button @click="createNewSession" class="new-session-btn">新對話</button>
-        <span v-if="sessionId" class="session-indicator">✓ 已連接</span>
+        <span v-if="activeSessionId" class="session-indicator">✓ {{ formatSessionBadge(activeSessionId) }}</span>
       </div>
     </header>
 
-    <div class="messages-container" ref="messagesContainer">
-      <div v-if="messages.length === 0" class="welcome-message">
-        <h2>👋 歡迎使用 Copilot CLI</h2>
-        <p>輸入您的問題，開始與 AI 助手對話</p>
-      </div>
-      
-      <div v-for="(msg, index) in messages" :key="index" class="message" :class="msg.role">
-        <div class="message-header">
-          <span class="role-badge">{{ msg.role === 'user' ? '👤 您' : '🤖 Copilot' }}</span>
-          <span class="timestamp">{{ formatTime(msg.timestamp) }}</span>
+    <div class="content">
+      <aside class="session-panel">
+        <div class="session-panel-header">
+          <h3>🧾 Sessions</h3>
+          <button @click="refreshSessions" class="refresh-btn">↻</button>
         </div>
-        <div class="message-content">{{ msg.content }}</div>
-      </div>
-
-      <div v-if="isLoading" class="message assistant loading">
-        <div class="message-header">
-          <span class="role-badge">🤖 Copilot</span>
-        </div>
-        <div class="message-content">
-          <div class="typing-indicator">
-            <span></span>
-            <span></span>
-            <span></span>
+        <div class="session-list">
+          <div
+            v-for="session in sessions"
+            :key="session.sessionId"
+            class="session-card"
+            :class="{ active: session.sessionId === activeSessionId }"
+            role="button"
+            @click="switchSession(session.sessionId)"
+          >
+            <div class="session-card-header">
+              <span class="session-id">{{ formatSessionBadge(session.sessionId) }}</span>
+              <span class="session-status" :class="session.status">{{ getStatusLabel(session.status) }}</span>
+              <button class="session-delete-btn" @click.stop="deleteSession(session.sessionId)">🗑</button>
+            </div>
+            <div class="session-meta">{{ session.model }}</div>
+            <div class="session-preview" v-if="session.lastResponsePreview">
+              {{ session.lastResponsePreview }}
+            </div>
+            <div class="session-error" v-if="session.lastError">❌ {{ session.lastError }}</div>
           </div>
         </div>
-      </div>
-    </div>
+      </aside>
 
-    <div class="input-container">
-      <div v-if="error" class="error-message">
-        ❌ {{ error }}
-      </div>
-      <div class="input-wrapper">
-        <textarea
-          v-model="inputMessage"
-          @keydown.enter.prevent="handleSend"
-          placeholder="輸入訊息... (Enter 發送)"
-          class="message-input"
-          rows="3"
-        ></textarea>
-        <button @click="handleSend" :disabled="!inputMessage.trim() || isLoading" class="send-btn">
-          📤 發送
-        </button>
-      </div>
+      <section class="chat-main">
+        <div class="messages-container" ref="messagesContainer">
+          <div v-if="messages.length === 0" class="welcome-message">
+            <h2>👋 歡迎使用 Copilot CLI</h2>
+            <p>輸入您的問題，開始與 AI 助手對話</p>
+          </div>
+          
+          <div v-for="(msg, index) in messages" :key="index" class="message" :class="msg.role">
+            <div class="message-header">
+              <span class="role-badge">{{ msg.role === 'user' ? '👤 您' : '🤖 Copilot' }}</span>
+              <span class="timestamp">{{ formatTime(msg.timestamp) }}</span>
+            </div>
+            <div class="message-content">{{ msg.content }}</div>
+          </div>
+
+          <div v-if="isLoading" class="message assistant loading">
+            <div class="message-header">
+              <span class="role-badge">🤖 Copilot</span>
+            </div>
+            <div class="message-content">
+              <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-container">
+          <div v-if="error" class="error-message">
+            ❌ {{ error }}
+          </div>
+          <div class="input-wrapper">
+            <textarea
+              v-model="inputMessage"
+              @keydown.enter.prevent="handleSend"
+              placeholder="輸入訊息... (Enter 發送)"
+              class="message-input"
+              rows="3"
+            ></textarea>
+            <button @click="handleSend" :disabled="!inputMessage.trim() || isLoading" class="send-btn">
+              📤 發送
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -85,7 +117,9 @@ export default {
     const inputMessage = ref('');
     const isLoading = ref(false);
     const error = ref('');
-    const sessionId = ref('');
+    const sessions = ref([]);
+    const sessionMessages = ref({});
+    const activeSessionId = ref('');
     const selectedModel = ref('claude-sonnet-4.5');
     const previousModel = ref('claude-sonnet-4.5');
     const messagesContainer = ref(null);
@@ -128,8 +162,9 @@ export default {
         isLoading.value = true;
         await copilotService.switchDirectory(selectedDirectory.value);
         currentDirectory.value = selectedDirectory.value;
-        
-        // 切換目錄後重新建立 session
+        sessionMessages.value = {};
+        sessions.value = [];
+        activeSessionId.value = '';
         await createNewSession();
         
         messages.value.push({
@@ -147,15 +182,43 @@ export default {
       }
     };
 
+    const refreshSessions = async () => {
+      try {
+        sessions.value = await copilotService.getSessionStatuses();
+        if (activeSessionId.value && !sessions.value.some((item) => item.sessionId === activeSessionId.value)) {
+          activeSessionId.value = '';
+          messages.value = [];
+        }
+      } catch (err) {
+        console.error('Failed to fetch sessions:', err);
+      }
+    };
+
+    const selectSession = (sessionId) => {
+      activeSessionId.value = sessionId;
+      if (!sessionMessages.value[sessionId]) {
+        sessionMessages.value[sessionId] = [];
+      }
+      messages.value = sessionMessages.value[sessionId];
+      const session = sessions.value.find((item) => item.sessionId === sessionId);
+      if (session?.model) {
+        selectedModel.value = session.model;
+        previousModel.value = session.model;
+      }
+    };
+
     const createNewSession = async () => {
       try {
         error.value = '';
         isLoading.value = true;
         const response = await copilotService.createSession(selectedModel.value);
-        sessionId.value = response.sessionId;
+        await refreshSessions();
+        if (!sessionMessages.value[response.sessionId]) {
+          sessionMessages.value[response.sessionId] = [];
+        }
+        selectSession(response.sessionId);
         previousModel.value = selectedModel.value;
-        messages.value = [];
-        console.log('Session created:', sessionId.value, 'Model:', selectedModel.value);
+        console.log('Session created:', activeSessionId.value, 'Model:', selectedModel.value);
       } catch (err) {
         error.value = '無法建立會話: ' + err.message;
         console.error('Create session error:', err);
@@ -165,7 +228,7 @@ export default {
     };
 
     const handleModelChange = async () => {
-      if (!sessionId.value) {
+      if (!activeSessionId.value) {
         await createNewSession();
         return;
       }
@@ -173,8 +236,9 @@ export default {
       try {
         error.value = '';
         isLoading.value = true;
-        await copilotService.switchModel(sessionId.value, selectedModel.value);
+        await copilotService.switchModel(activeSessionId.value, selectedModel.value);
         previousModel.value = selectedModel.value;
+        await refreshSessions();
         console.log('Model switched in current session:', selectedModel.value);
       } catch (err) {
         error.value = '切換模型失敗: ' + err.message;
@@ -189,10 +253,10 @@ export default {
       if (!inputMessage.value.trim() || isLoading.value) return;
 
       // 確保有 session
-      if (!sessionId.value) {
+      if (!activeSessionId.value) {
         error.value = '會話未初始化，請稍候...';
         await createNewSession();
-        if (!sessionId.value) return;
+        if (!activeSessionId.value) return;
       }
 
       const userMessage = inputMessage.value.trim();
@@ -209,15 +273,16 @@ export default {
       error.value = '';
 
       try {
-        console.log('Sending message to session:', sessionId.value);
-        const response = await copilotService.sendMessage(sessionId.value, userMessage);
+        console.log('Sending message to session:', activeSessionId.value);
+        const response = await copilotService.sendMessage(activeSessionId.value, userMessage);
         
         messages.value.push({
           role: 'assistant',
           content: response.content,
           timestamp: new Date()
         });
-        
+
+        await refreshSessions();
         scrollToBottom();
         console.log('Message sent successfully');
       } catch (err) {
@@ -234,6 +299,41 @@ export default {
       }
     };
 
+    const switchSession = async (sessionId) => {
+      if (activeSessionId.value === sessionId) return;
+      selectSession(sessionId);
+      error.value = '';
+      await refreshSessions();
+    };
+
+    const deleteSession = async (sessionId) => {
+      try {
+        await copilotService.deleteSession(sessionId);
+        await refreshSessions();
+        if (activeSessionId.value === sessionId) {
+          activeSessionId.value = '';
+          messages.value = [];
+        }
+        delete sessionMessages.value[sessionId];
+      } catch (err) {
+        error.value = '刪除 session 失敗: ' + err.message;
+      }
+    };
+
+    const getStatusLabel = (status) => {
+      switch (status) {
+        case 'running': return '運行中';
+        case 'idle': return '待命';
+        case 'error': return '錯誤';
+        default: return status || '未知';
+      }
+    };
+
+    const formatSessionBadge = (sessionId) => {
+      if (!sessionId) return '';
+      return sessionId.slice(0, 8);
+    };
+
     const formatTime = (date) => {
       if (!date) return '';
       const d = new Date(date);
@@ -242,7 +342,13 @@ export default {
 
     onMounted(() => {
       loadDirectories();
-      createNewSession();
+      refreshSessions().then(() => {
+        if (sessions.value.length > 0) {
+          selectSession(sessions.value[0].sessionId);
+        } else {
+          createNewSession();
+        }
+      });
     });
 
     return {
@@ -252,7 +358,9 @@ export default {
       error,
       selectedModel,
       messagesContainer,
-      sessionId,
+      sessions,
+      sessionMessages,
+      activeSessionId,
       availableDirectories,
       currentDirectory,
       selectedDirectory,
@@ -260,6 +368,11 @@ export default {
       createNewSession,
       handleModelChange,
       handleDirectoryChange,
+      refreshSessions,
+      switchSession,
+      deleteSession,
+      getStatusLabel,
+      formatSessionBadge,
       getDirectoryName,
       formatTime
     };
@@ -272,8 +385,8 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0;
   background: #252526;
 }
 
@@ -344,6 +457,125 @@ export default {
   padding: 0.5rem 1rem;
   background: rgba(22, 130, 93, 0.1);
   border-radius: 4px;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.session-panel {
+  width: 280px;
+  border-right: 1px solid #3e3e42;
+  background: #1f1f1f;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.session-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #e4e4e4;
+}
+
+.refresh-btn {
+  background: #2d2d30;
+  color: #e4e4e4;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  overflow-y: auto;
+}
+
+.session-card {
+  text-align: left;
+  padding: 0.6rem;
+  border-radius: 6px;
+  background: #2b2b2f;
+  border: 1px solid transparent;
+  color: #e4e4e4;
+}
+
+.session-card.active {
+  border-color: #0078d4;
+  background: rgba(0, 120, 212, 0.15);
+}
+
+.session-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  gap: 0.5rem;
+}
+
+.session-id {
+  font-weight: 600;
+}
+
+.session-status {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+}
+
+.session-status.running {
+  background: #0f5a3f;
+}
+
+.session-status.idle {
+  background: #444;
+}
+
+.session-status.error {
+  background: #7a2d2d;
+}
+
+.session-delete-btn {
+  background: transparent;
+  color: #cfcfcf;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.session-meta {
+  font-size: 0.75rem;
+  color: #bfbfbf;
+}
+
+.session-preview {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #cfcfcf;
+}
+
+.session-error {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #f48771;
 }
 
 .messages-container {
@@ -478,6 +710,7 @@ export default {
   padding: 1rem 2rem 2rem;
   background: #2d2d30;
   border-top: 1px solid #3e3e42;
+  flex-shrink: 0;
 }
 
 .error-message {

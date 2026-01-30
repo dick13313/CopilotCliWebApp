@@ -29,8 +29,26 @@ export const copilotService = {
     return response.data;
   },
 
+  async getSessionStatuses() {
+    const response = await axios.get(`${API_BASE_URL}/chat/sessions/status`);
+    return response.data;
+  },
+
+  async getSessionStatus(sessionId) {
+    const response = await axios.get(`${API_BASE_URL}/chat/session/${sessionId}`);
+    return response.data;
+  },
+
   async deleteSession(sessionId) {
     const response = await axios.delete(`${API_BASE_URL}/chat/session/${sessionId}`);
+    return response.data;
+  },
+
+  async sendBatch(sessionIds, prompt) {
+    const response = await axios.post(`${API_BASE_URL}/chat/batch`, {
+      sessionIds,
+      prompt
+    });
     return response.data;
   },
 

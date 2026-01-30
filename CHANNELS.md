@@ -72,6 +72,30 @@ dotnet run
 3. 發送訊息
 4. Bot 會回應 Copilot CLI 結果
 
+## 💬 Telegram 指令
+
+### Session 管理
+- `/session list` - 列出所有 session（含狀態/模型）
+- `/session use <編號|sessionId>` - 切換目前 session
+- `/session new` - 建立並切換到新 session
+- `/session close <編號|sessionId>` - 關閉指定 session
+- `/session status [編號|sessionId]` - 查詢 session 狀態與最近回覆
+- `/new` - 建立新 session 並切換
+- `/use <編號|sessionId>` - 切換 session
+- `/list` - 列出所有 session
+- `/close <編號|sessionId>` - 關閉指定 session
+- `/status [編號|sessionId]` - 查詢 session 狀態與最近回覆
+
+### 批次任務
+- `/task <prompt>` - 自動建立新 session 指派任務
+- `/task <編號1,編號2> <prompt>` - 同時指派多個 session（並行）
+
+### 回覆格式
+- 每次回覆都會附上 SessionId 與狀態，方便識別任務歸屬。
+
+### 其他
+- `/help` - 顯示指令列表
+
 ## 🛠️ 擴充新通道（範例）
 
 建立新的通道類別，例如 `DiscordChannel`：
