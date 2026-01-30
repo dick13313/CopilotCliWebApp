@@ -42,5 +42,22 @@ export const copilotService = {
   async getTelegramSettings() {
     const response = await axios.get(`${API_BASE_URL}/channel/telegram`);
     return response.data;
+  },
+
+  async getDirectories() {
+    const response = await axios.get(`${API_BASE_URL}/directory`);
+    return response.data;
+  },
+
+  async getCurrentDirectory() {
+    const response = await axios.get(`${API_BASE_URL}/directory/current`);
+    return response.data;
+  },
+
+  async switchDirectory(directoryPath) {
+    const response = await axios.post(`${API_BASE_URL}/directory/switch`, {
+      directoryPath
+    });
+    return response.data;
   }
 };

@@ -126,6 +126,13 @@ public class TelegramChannel : IChatChannel
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(prompt) && prompt.StartsWith("/cd", StringComparison.OrdinalIgnoreCase))
+        {
+            var reply = await HandleDirectorySwitchAsync(prompt);
+            await SendMessageAsync(chatId, reply, cancellationToken);
+            return;
+        }
+
         var sessionId = await GetOrCreateSessionAsync(chatId);
         _logger.LogInformation("Telegram message received from {ChatId} in session {SessionId}", chatId, sessionId);
 
@@ -213,18 +220,192 @@ public class TelegramChannel : IChatChannel
         return tempFile;
     }
 
-    private async Task<string> HandleModelSwitchAsync(long chatId, string prompt)
+    private async Task<string> HandleDirectorySwitchAsync(string prompt)
     {
         var parts = prompt.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        
+        // 如果只輸入 /cd，顯示當前目錄和可用目錄
         if (parts.Length < 2)
         {
-            return "使用方式: /model <model-name>";
+            try
+            {
+                var currentDir = _copilotService.GetCurrentDirectory();
+                var baseDir = new DirectoryInfo(currentDir).Parent?.FullName ?? currentDir;
+                
+                var sb = new StringBuilder();
+                sb.AppendLine($"📂 當前目錄: {Path.GetFileName(currentDir)}");
+                sb.AppendLine($"🏠 主目錄: {baseDir}");
+                sb.AppendLine();
+                sb.AppendLine("📋 可用目錄列表：");
+                
+                if (Directory.Exists(baseDir))
+                {
+                    var directories = Directory.GetDirectories(baseDir)
+                        .Select(d => new DirectoryInfo(d))
+                        .Where(d => !d.Name.StartsWith("."))
+                        .OrderBy(d => d.Name)
+                        .ToList();
+                    
+                    for (int i = 0; i < directories.Count; i++)
+                    {
+                        var marker = directories[i].FullName == currentDir ? "✓ " : "  ";
+                        sb.AppendLine($"{marker}{i + 1}. {directories[i].Name}");
+                    }
+                }
+                
+                sb.AppendLine();
+                sb.AppendLine("使用方式：");
+                sb.AppendLine("• /cd <數字> - 切換到對應目錄");
+                sb.AppendLine("• /cd <目錄名稱> - 切換到指定目錄");
+                sb.AppendLine("• /cd .. - 返回主目錄");
+                
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to list directories");
+                return $"❌ 無法列出目錄: {ex.Message}";
+            }
         }
 
-        var model = parts[1].Trim();
-        var sessionId = await GetOrCreateSessionAsync(chatId);
-        await _copilotService.UpdateSessionModelAsync(sessionId, model);
-        return $"模型已切換為: {model}";
+        var input = parts[1].Trim();
+        string? targetDirectory = null;
+
+        try
+        {
+            var currentDir = _copilotService.GetCurrentDirectory();
+            var baseDir = new DirectoryInfo(currentDir).Parent?.FullName ?? currentDir;
+
+            // 處理 ".." 返回主目錄
+            if (input == "..")
+            {
+                targetDirectory = baseDir;
+            }
+            // 嘗試解析為數字
+            else if (int.TryParse(input, out var dirIndex) && dirIndex >= 1)
+            {
+                if (Directory.Exists(baseDir))
+                {
+                    var directories = Directory.GetDirectories(baseDir)
+                        .Select(d => new DirectoryInfo(d))
+                        .Where(d => !d.Name.StartsWith("."))
+                        .OrderBy(d => d.Name)
+                        .ToList();
+                    
+                    if (dirIndex <= directories.Count)
+                    {
+                        targetDirectory = directories[dirIndex - 1].FullName;
+                    }
+                    else
+                    {
+                        return $"❌ 無效的目錄編號，請選擇 1-{directories.Count}";
+                    }
+                }
+            }
+            // 嘗試作為目錄名稱
+            else
+            {
+                // 先嘗試相對於 base directory
+                var fullPath = Path.Combine(baseDir, input);
+                if (Directory.Exists(fullPath))
+                {
+                    targetDirectory = fullPath;
+                }
+                // 再嘗試絕對路徑
+                else if (Directory.Exists(input))
+                {
+                    targetDirectory = input;
+                }
+                else
+                {
+                    return $"❌ 找不到目錄: {input}";
+                }
+            }
+
+            if (targetDirectory != null)
+            {
+                await _copilotService.SwitchDirectoryAsync(targetDirectory);
+                return $"✅ 已切換到目錄: {Path.GetFileName(targetDirectory)}";
+            }
+            
+            return "❌ 無法切換目錄";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to switch directory to {Directory}", input);
+            return $"❌ 切換目錄失敗: {ex.Message}";
+        }
+    }
+
+    private async Task<string> HandleModelSwitchAsync(long chatId, string prompt)
+    {
+        var availableModels = new[]
+        {
+            ("claude-sonnet-4.5", "Claude Sonnet 4.5 (預設, 平衡型)"),
+            ("claude-haiku-4.5", "Claude Haiku 4.5 (快速/經濟)"),
+            ("claude-opus-4.5", "Claude Opus 4.5 (進階)"),
+            ("claude-sonnet-4", "Claude Sonnet 4 (標準)"),
+            ("gemini-3-pro-preview", "Gemini 3 Pro Preview (標準)"),
+            ("gpt-5.2-codex", "GPT-5.2 Codex (標準)"),
+            ("gpt-5.2", "GPT-5.2 (標準)"),
+            ("gpt-5.1-codex-max", "GPT-5.1 Codex Max (標準)"),
+            ("gpt-5.1-codex", "GPT-5.1 Codex (標準)"),
+            ("gpt-5.1", "GPT-5.1 (標準)"),
+            ("gpt-5", "GPT-5 (標準)"),
+            ("gpt-5.1-codex-mini", "GPT-5.1 Codex Mini (快速/經濟)"),
+            ("gpt-5-mini", "GPT-5 Mini (快速/經濟)"),
+            ("gpt-4.1", "GPT-4.1 (快速/經濟)")
+        };
+
+        var parts = prompt.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        
+        // 如果只輸入 /model，顯示模型列表
+        if (parts.Length < 2)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("📋 可用模型列表：");
+            sb.AppendLine();
+            for (int i = 0; i < availableModels.Length; i++)
+            {
+                sb.AppendLine($"{i + 1}. {availableModels[i].Item2}");
+            }
+            sb.AppendLine();
+            sb.AppendLine("使用方式：");
+            sb.AppendLine("• /model <數字> - 切換模型");
+            sb.AppendLine("• /model <模型名稱> - 切換模型");
+            return sb.ToString();
+        }
+
+        var input = parts[1].Trim();
+        string? selectedModel = null;
+
+        // 嘗試解析為數字
+        if (int.TryParse(input, out var modelIndex) && modelIndex >= 1 && modelIndex <= availableModels.Length)
+        {
+            selectedModel = availableModels[modelIndex - 1].Item1;
+        }
+        else
+        {
+            // 直接使用模型名稱
+            selectedModel = input;
+        }
+
+        try
+        {
+            var sessionId = await GetOrCreateSessionAsync(chatId);
+            await _copilotService.UpdateSessionModelAsync(sessionId, selectedModel);
+            
+            // 找到對應的描述
+            var modelDesc = availableModels.FirstOrDefault(m => m.Item1.Equals(selectedModel, StringComparison.OrdinalIgnoreCase)).Item2;
+            return modelDesc != null 
+                ? $"✅ 模型已切換為: {modelDesc}" 
+                : $"✅ 模型已切換為: {selectedModel}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to switch model to {Model}", selectedModel);
+            return $"❌ 切換模型失敗: {ex.Message}";
+        }
     }
 
     private sealed class TelegramFileResponse

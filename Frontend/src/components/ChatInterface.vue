@@ -1,7 +1,18 @@
 <template>
   <div class="chat-container">
     <header class="header">
-      <h1>🤖 GitHub Copilot CLI Web Interface</h1>
+      <div class="header-left">
+        <h1>🤖 GitHub Copilot CLI Web Interface</h1>
+        <div class="directory-selector">
+          <label>📂</label>
+          <select v-model="selectedDirectory" class="directory-select" @change="handleDirectoryChange">
+            <option :value="currentDirectory" disabled>{{ getDirectoryName(currentDirectory) }}</option>
+            <option v-for="dir in availableDirectories" :key="dir.fullPath" :value="dir.fullPath">
+              {{ dir.name }}
+            </option>
+          </select>
+        </div>
+      </div>
       <div class="session-info">
         <select v-model="selectedModel" class="model-select" @change="handleModelChange">
           <option value="claude-sonnet-4.5">Claude Sonnet 4.5 (預設)</option>
@@ -78,6 +89,9 @@ export default {
     const selectedModel = ref('claude-sonnet-4.5');
     const previousModel = ref('claude-sonnet-4.5');
     const messagesContainer = ref(null);
+    const availableDirectories = ref([]);
+    const currentDirectory = ref('');
+    const selectedDirectory = ref('');
 
     const scrollToBottom = () => {
       nextTick(() => {
@@ -85,6 +99,52 @@ export default {
           messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
         }
       });
+    };
+
+    const loadDirectories = async () => {
+      try {
+        const response = await copilotService.getDirectories();
+        availableDirectories.value = response.directories;
+        currentDirectory.value = response.currentDirectory;
+        selectedDirectory.value = response.currentDirectory;
+      } catch (err) {
+        console.error('Failed to load directories:', err);
+      }
+    };
+
+    const getDirectoryName = (path) => {
+      if (!path) return '選擇目錄';
+      const parts = path.split(/[/\\]/);
+      return parts[parts.length - 1] || path;
+    };
+
+    const handleDirectoryChange = async () => {
+      if (!selectedDirectory.value || selectedDirectory.value === currentDirectory.value) {
+        return;
+      }
+
+      try {
+        error.value = '';
+        isLoading.value = true;
+        await copilotService.switchDirectory(selectedDirectory.value);
+        currentDirectory.value = selectedDirectory.value;
+        
+        // 切換目錄後重新建立 session
+        await createNewSession();
+        
+        messages.value.push({
+          role: 'assistant',
+          content: `✅ 已切換到目錄: ${getDirectoryName(selectedDirectory.value)}`,
+          timestamp: new Date()
+        });
+        scrollToBottom();
+      } catch (err) {
+        error.value = '切換目錄失敗: ' + err.message;
+        selectedDirectory.value = currentDirectory.value;
+        console.error('Switch directory error:', err);
+      } finally {
+        isLoading.value = false;
+      }
     };
 
     const createNewSession = async () => {
@@ -181,6 +241,7 @@ export default {
     };
 
     onMounted(() => {
+      loadDirectories();
       createNewSession();
     });
 
@@ -192,9 +253,14 @@ export default {
       selectedModel,
       messagesContainer,
       sessionId,
+      availableDirectories,
+      currentDirectory,
+      selectedDirectory,
       handleSend,
       createNewSession,
       handleModelChange,
+      handleDirectoryChange,
+      getDirectoryName,
       formatTime
     };
   }
@@ -220,9 +286,35 @@ export default {
   align-items: center;
 }
 
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .header h1 {
   font-size: 1.5rem;
   color: #e4e4e4;
+}
+
+.directory-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.directory-selector label {
+  font-size: 1.2rem;
+}
+
+.directory-select {
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: #1e1e1e;
+  color: #e4e4e4;
+  border: 1px solid #3e3e42;
+  min-width: 200px;
 }
 
 .session-info {

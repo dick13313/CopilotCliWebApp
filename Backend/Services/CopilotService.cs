@@ -13,11 +13,13 @@ public class CopilotService : IDisposable
     private readonly ConcurrentDictionary<string, IDisposable> _eventSubscriptions = new();
     private readonly ILogger<CopilotService> _logger;
     private readonly CopilotCliOptions _cliOptions;
+    private string _currentDirectory;
 
     public CopilotService(ILogger<CopilotService> logger, IOptions<CopilotCliOptions> cliOptions)
     {
         _logger = logger;
         _cliOptions = cliOptions.Value;
+        _currentDirectory = _cliOptions.WorkingDirectory ?? Directory.GetCurrentDirectory();
     }
 
     public async Task InitializeAsync()
@@ -27,14 +29,14 @@ public class CopilotService : IDisposable
             try
             {
                 var clientOptions = new CopilotClientOptions();
-                if (!string.IsNullOrWhiteSpace(_cliOptions.WorkingDirectory))
+                if (!string.IsNullOrWhiteSpace(_currentDirectory))
                 {
-                    clientOptions.Cwd = _cliOptions.WorkingDirectory;
+                    clientOptions.Cwd = _currentDirectory;
                 }
 
                 _client = new CopilotClient(clientOptions);
                 await _client.StartAsync();
-                _logger.LogInformation("Copilot CLI client started successfully");
+                _logger.LogInformation("Copilot CLI client started successfully with directory: {Directory}", _currentDirectory);
             }
             catch (Exception ex)
             {
@@ -174,6 +176,42 @@ public class CopilotService : IDisposable
             await session.DisposeAsync();
             _logger.LogInformation("Deleted session: {SessionId}", sessionId);
         }
+    }
+
+    public string GetCurrentDirectory()
+    {
+        return _currentDirectory;
+    }
+
+    public async Task SwitchDirectoryAsync(string newDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(newDirectory))
+        {
+            throw new ArgumentException("Directory path is required", nameof(newDirectory));
+        }
+
+        if (!Directory.Exists(newDirectory))
+        {
+            throw new DirectoryNotFoundException($"Directory not found: {newDirectory}");
+        }
+
+        _logger.LogInformation("Switching directory from {OldDir} to {NewDir}", _currentDirectory, newDirectory);
+
+        // 停止舊的 client
+        if (_client != null)
+        {
+            await _client.StopAsync();
+            _client.Dispose();
+            _client = null;
+        }
+
+        // 更新目錄
+        _currentDirectory = newDirectory;
+
+        // 重新初始化 client
+        await InitializeAsync();
+
+        _logger.LogInformation("Directory switched successfully to {Directory}", _currentDirectory);
     }
 
     public void Dispose()
