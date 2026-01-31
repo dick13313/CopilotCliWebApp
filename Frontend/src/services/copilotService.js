@@ -77,5 +77,42 @@ export const copilotService = {
       directoryPath
     });
     return response.data;
+  },
+
+  async getOperationsStatus() {
+    const response = await axios.get(`${API_BASE_URL}/operations/status`);
+    return response.data;
+  },
+
+  async getOperationsLogs(count = 50) {
+    const response = await axios.get(`${API_BASE_URL}/operations/logs`, {
+      params: { count }
+    });
+    return response.data;
+  },
+
+  async startFrontend() {
+    const response = await axios.post(`${API_BASE_URL}/operations/frontend/start`);
+    return response.data;
+  },
+
+  async stopFrontend() {
+    const response = await axios.post(`${API_BASE_URL}/operations/frontend/stop`);
+    return response.data;
+  },
+
+  async restartFrontend() {
+    const response = await axios.post(`${API_BASE_URL}/operations/frontend/restart`);
+    return response.data;
+  },
+
+  async runDiagnostics() {
+    const response = await axios.post(`${API_BASE_URL}/operations/diagnostics`);
+    return response.data;
+  },
+
+  async resetCopilotClient() {
+    const response = await axios.post(`${API_BASE_URL}/operations/heal`);
+    return response.data;
   }
 };

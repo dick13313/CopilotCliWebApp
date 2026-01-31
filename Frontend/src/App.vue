@@ -13,10 +13,17 @@
       >
         🔌 Channels
       </button>
+      <button
+        :class="{ active: activeTab === 'operations' }"
+        @click="activeTab = 'operations'"
+      >
+        🛠️ Operations
+      </button>
     </nav>
 
     <ChatInterface v-if="activeTab === 'chat'" />
-    <ChannelSettings v-else />
+    <ChannelSettings v-else-if="activeTab === 'channels'" />
+    <OperationsPanel v-else />
   </div>
 </template>
 
@@ -24,12 +31,14 @@
 import { ref } from 'vue';
 import ChatInterface from './components/ChatInterface.vue';
 import ChannelSettings from './components/ChannelSettings.vue';
+import OperationsPanel from './components/OperationsPanel.vue';
 
 export default {
   name: 'App',
   components: {
     ChatInterface,
-    ChannelSettings
+    ChannelSettings,
+    OperationsPanel
   },
   setup() {
     const activeTab = ref('chat');

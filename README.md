@@ -122,6 +122,18 @@ npm run dev
 | GET | `/api/channel` | 取得所有通訊通道狀態 |
 | GET | `/api/channel/telegram` | 取得 Telegram 設定 |
 
+### Operations Controller
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/operations/status` | 取得前端/操作狀態 |
+| GET | `/api/operations/logs` | 取得操作記錄 |
+| POST | `/api/operations/frontend/start` | 啟動前端 |
+| POST | `/api/operations/frontend/stop` | 停止前端 |
+| POST | `/api/operations/frontend/restart` | 重啟前端 |
+| POST | `/api/operations/diagnostics` | 執行診斷 |
+| POST | `/api/operations/heal` | 重置 Copilot CLI |
+
 ### 請求範例
 
 **建立會話：**
@@ -155,6 +167,14 @@ POST /api/chat/send
 ### copilotService.js
 
 API 通訊服務，處理所有與後端的互動。
+
+### OperationsPanel.vue
+
+Operations 控制面板，包含：
+- 前端狀態
+- 啟動/停止/重啟
+- 診斷與自我修復
+- 操作記錄
 
 ## ⚙️ 設定
 

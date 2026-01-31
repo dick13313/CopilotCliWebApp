@@ -15,11 +15,20 @@
       </div>
       <div class="session-info">
         <select v-model="selectedModel" class="model-select" @change="handleModelChange">
-          <option value="claude-sonnet-4.5">Claude Sonnet 4.5 (預設)</option>
-          <option value="claude-sonnet-4">Claude Sonnet 4</option>
-          <option value="gpt-4.1">GPT-4.1</option>
-          <option value="gpt-5-mini">GPT-5 Mini</option>
-          <option value="claude-haiku-4.5">Claude Haiku 4.5</option>
+          <option value="claude-sonnet-4.5">Claude Sonnet 4.5 (預設, 平衡型)</option>
+          <option value="claude-haiku-4.5">Claude Haiku 4.5 (快速/經濟)</option>
+          <option value="claude-opus-4.5">Claude Opus 4.5 (進階)</option>
+          <option value="claude-sonnet-4">Claude Sonnet 4 (標準)</option>
+          <option value="gemini-3-pro-preview">Gemini 3 Pro Preview (標準)</option>
+          <option value="gpt-5.2-codex">GPT-5.2 Codex (標準)</option>
+          <option value="gpt-5.2">GPT-5.2 (標準)</option>
+          <option value="gpt-5.1-codex-max">GPT-5.1 Codex Max (標準)</option>
+          <option value="gpt-5.1-codex">GPT-5.1 Codex (標準)</option>
+          <option value="gpt-5.1">GPT-5.1 (標準)</option>
+          <option value="gpt-5">GPT-5 (標準)</option>
+          <option value="gpt-5.1-codex-mini">GPT-5.1 Codex Mini (快速/經濟)</option>
+          <option value="gpt-5-mini">GPT-5 Mini (快速/經濟)</option>
+          <option value="gpt-4.1">GPT-4.1 (快速/經濟)</option>
         </select>
         <button @click="createNewSession" class="new-session-btn">新對話</button>
         <span v-if="activeSessionId" class="session-indicator">✓ {{ formatSessionBadge(activeSessionId) }}</span>

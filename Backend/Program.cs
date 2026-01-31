@@ -26,6 +26,7 @@ builder.Services.AddCors(options =>
 
 // Register Copilot Service as singleton
 builder.Services.AddSingleton<CopilotService>();
+builder.Services.AddSingleton<OperationsSupervisor>();
 builder.Services.AddSingleton<IChatChannel, TelegramChannel>();
 builder.Services.AddHostedService<ChannelService>();
 

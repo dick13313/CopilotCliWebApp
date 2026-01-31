@@ -1,3 +1,4 @@
+using CopilotApi.Models;
 using CopilotApi.Options;
 using CopilotApi.Services;
 using GitHub.Copilot.SDK;
@@ -16,6 +17,7 @@ public class TelegramChannel : IChatChannel
 {
     private readonly ILogger<TelegramChannel> _logger;
     private readonly CopilotService _copilotService;
+    private readonly OperationsSupervisor _operations;
     private readonly TelegramOptions _options;
     private readonly CopilotCliOptions _cliOptions;
     private readonly HttpClient _httpClient;
@@ -34,12 +36,14 @@ public class TelegramChannel : IChatChannel
     public TelegramChannel(
         ILogger<TelegramChannel> logger,
         CopilotService copilotService,
+        OperationsSupervisor operations,
         IOptions<TelegramOptions> options,
         IOptions<CopilotCliOptions> cliOptions,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _copilotService = copilotService;
+        _operations = operations;
         _options = options.Value;
         _cliOptions = cliOptions.Value;
         _httpClient = httpClientFactory.CreateClient();
@@ -186,6 +190,13 @@ public class TelegramChannel : IChatChannel
         {
             var taskReply = await HandleTaskCommandAsync(chatId, prompt);
             await SendMessageAsync(chatId, taskReply, cancellationToken);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt) && prompt.StartsWith("/ops", StringComparison.OrdinalIgnoreCase))
+        {
+            var opsReply = await HandleOpsCommandAsync(prompt, cancellationToken);
+            await SendMessageAsync(chatId, opsReply, cancellationToken);
             return;
         }
 
@@ -477,8 +488,87 @@ public class TelegramChannel : IChatChannel
         sb.AppendLine("• /status [編號|sessionId] - 查看 session 狀態");
         sb.AppendLine("• /task <prompt> - 自動建立新 session 指派任務");
         sb.AppendLine("• /task <編號[,編號2]> <prompt> - 指派任務");
+        sb.AppendLine("• /ops [status|start|stop|restart|diagnose|heal] - 專案控制/診斷");
         sb.AppendLine("• /model [model] - 切換模型");
         sb.AppendLine("• /cd [dir] - 列出或切換工作目錄");
+        return sb.ToString();
+    }
+
+    private async Task<string> HandleOpsCommandAsync(string prompt, CancellationToken cancellationToken)
+    {
+        var parts = prompt.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return GetOpsHelpText();
+        }
+
+        var action = parts[1].ToLowerInvariant();
+        switch (action)
+        {
+            case "status":
+                return BuildOpsStatusReply(_operations.GetStatus());
+            case "start":
+                return BuildOpsActionReply(await _operations.StartFrontendAsync(cancellationToken));
+            case "stop":
+                return BuildOpsActionReply(await _operations.StopFrontendAsync(cancellationToken));
+            case "restart":
+                await _operations.StopFrontendAsync(cancellationToken);
+                return BuildOpsActionReply(await _operations.StartFrontendAsync(cancellationToken), "restart_frontend");
+            case "diagnose":
+            case "diagnostics":
+                return BuildDiagnosticsReply(await _operations.RunDiagnosticsAsync(cancellationToken));
+            case "heal":
+            case "reset":
+                await _copilotService.ResetClientAsync();
+                return "✅ Copilot CLI client 已重置並重新初始化。";
+            default:
+                return GetOpsHelpText();
+        }
+    }
+
+    private static string GetOpsHelpText()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("🛠️ Ops 指令：");
+        sb.AppendLine("• /ops status - 顯示服務狀態");
+        sb.AppendLine("• /ops start - 啟動前端");
+        sb.AppendLine("• /ops stop - 停止前端");
+        sb.AppendLine("• /ops restart - 重啟前端");
+        sb.AppendLine("• /ops diagnose - 執行診斷");
+        sb.AppendLine("• /ops heal - 重置 Copilot CLI");
+        return sb.ToString();
+    }
+
+    private static string BuildOpsStatusReply(OperationsStatus status)
+    {
+        var frontend = status.Frontend;
+        var sb = new StringBuilder();
+        sb.AppendLine("📊 Ops Status");
+        sb.AppendLine($"Frontend: {(frontend.IsRunning ? "running" : "stopped")}" +
+                      $"{(frontend.Pid.HasValue ? $" (PID {frontend.Pid})" : string.Empty)}");
+        if (frontend.Port.HasValue)
+        {
+            sb.AppendLine($"Port {frontend.Port}: {(frontend.PortOpen == true ? "open" : "closed")}");
+        }
+        return sb.ToString();
+    }
+
+    private static string BuildOpsActionReply(OperationsActionResult result, string? actionOverride = null)
+    {
+        var action = actionOverride ?? result.Action;
+        return $"✅ {action}: {result.Status}\n{result.Message}";
+    }
+
+    private string BuildDiagnosticsReply(DiagnosticsResult diagnostics)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("🩺 Diagnostics");
+        foreach (var check in diagnostics.Checks)
+        {
+            var status = check.TimedOut ? "timeout" : check.ExitCode == 0 ? "ok" : $"exit {check.ExitCode}";
+            var detail = BuildPreview(!string.IsNullOrWhiteSpace(check.Error) ? check.Error : check.Output);
+            sb.AppendLine($"• {check.Command} [{status}] {detail}");
+        }
         return sb.ToString();
     }
 

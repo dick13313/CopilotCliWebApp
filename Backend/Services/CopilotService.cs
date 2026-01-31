@@ -331,6 +331,33 @@ public class CopilotService : IDisposable
         _logger.LogInformation("Directory switched successfully to {Directory}", _currentDirectory);
     }
 
+    public async Task ResetClientAsync()
+    {
+        _logger.LogWarning("Resetting Copilot CLI client and clearing sessions");
+
+        foreach (var subscription in _eventSubscriptions.Values)
+        {
+            subscription?.Dispose();
+        }
+        _eventSubscriptions.Clear();
+
+        foreach (var session in _sessions.Values)
+        {
+            await session.DisposeAsync();
+        }
+        _sessions.Clear();
+        _sessionStates.Clear();
+
+        if (_client != null)
+        {
+            await _client.StopAsync();
+            _client.Dispose();
+            _client = null;
+        }
+
+        await InitializeAsync();
+    }
+
     public void Dispose()
     {
         // 清理所有事件訂閱

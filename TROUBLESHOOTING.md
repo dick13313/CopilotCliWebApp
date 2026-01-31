@@ -48,9 +48,22 @@ StreamJsonRpc.ConnectionLostException: 與遠端合作物件的 JSON-RPC 連線�
    ```
 
 4. **測試 Copilot CLI**
-   ```bash
-   copilot -p "hello"
-   ```
+    ```bash
+    copilot -p "hello"
+    ```
+
+---
+
+### 1.1 ❌ 前端無法遠端啟動 / ops 操作失敗
+
+**症狀：**
+- `/ops start` 回覆 port in use 或 failed
+- Web Operations 面板顯示前端已停止
+
+**解決方法：**
+1. 檢查 Port 5173 是否被占用
+2. 關閉佔用程序後再次執行 `/ops start`
+3. 確認 Backend 服務仍在運行，避免 API 無回應
 
 ---
 
