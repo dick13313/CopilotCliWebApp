@@ -37,6 +37,7 @@ public class SessionStatusInfo
     public string SessionId { get; set; } = string.Empty;
     public string Model { get; set; } = string.Empty;
     public string Status { get; set; } = "idle";
+    public string Channel { get; set; } = "web";
     public DateTime CreatedAt { get; set; }
     public DateTime LastUpdatedAt { get; set; }
     public string? LastPrompt { get; set; }

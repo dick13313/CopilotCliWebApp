@@ -116,8 +116,11 @@
 </template>
 
 <script>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, watch } from 'vue';
 import { copilotService } from '../services/copilotService.js';
+
+const STORAGE_KEY_MESSAGES = 'copilot_session_messages';
+const STORAGE_KEY_ACTIVE_SESSION = 'copilot_active_session';
 
 export default {
   name: 'ChatInterface',
@@ -135,6 +138,36 @@ export default {
     const availableDirectories = ref([]);
     const currentDirectory = ref('');
     const selectedDirectory = ref('');
+
+    // 從 localStorage 載入對話歷史
+    const loadFromStorage = () => {
+      try {
+        const savedMessages = localStorage.getItem(STORAGE_KEY_MESSAGES);
+        if (savedMessages) {
+          sessionMessages.value = JSON.parse(savedMessages);
+        }
+        const savedActiveSession = localStorage.getItem(STORAGE_KEY_ACTIVE_SESSION);
+        if (savedActiveSession) {
+          activeSessionId.value = savedActiveSession;
+        }
+      } catch (err) {
+        console.error('Failed to load from localStorage:', err);
+      }
+    };
+
+    // 保存對話歷史到 localStorage
+    const saveToStorage = () => {
+      try {
+        localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(sessionMessages.value));
+        localStorage.setItem(STORAGE_KEY_ACTIVE_SESSION, activeSessionId.value);
+      } catch (err) {
+        console.error('Failed to save to localStorage:', err);
+      }
+    };
+
+    // 監聽 sessionMessages 和 activeSessionId 變化自動保存
+    watch(sessionMessages, saveToStorage, { deep: true });
+    watch(activeSessionId, saveToStorage);
 
     const scrollToBottom = () => {
       nextTick(() => {
@@ -349,15 +382,38 @@ export default {
       return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
     };
 
-    onMounted(() => {
-      loadDirectories();
-      refreshSessions().then(() => {
-        if (sessions.value.length > 0) {
-          selectSession(sessions.value[0].sessionId);
-        } else {
-          createNewSession();
-        }
-      });
+    // 清理不存在的 session 對話記錄
+    const cleanupOrphanedMessages = () => {
+      const validSessionIds = new Set(sessions.value.map(s => s.sessionId));
+      const orphanedIds = Object.keys(sessionMessages.value).filter(id => !validSessionIds.has(id));
+      orphanedIds.forEach(id => delete sessionMessages.value[id]);
+    };
+
+    onMounted(async () => {
+      // 先從 localStorage 載入保存的對話
+      loadFromStorage();
+      
+      await loadDirectories();
+      await refreshSessions();
+      
+      // 清理已不存在的 session 對話記錄
+      cleanupOrphanedMessages();
+      
+      // 嘗試恢復之前的 active session
+      const savedSessionId = activeSessionId.value;
+      const sessionExists = savedSessionId && sessions.value.some(s => s.sessionId === savedSessionId);
+      
+      if (sessionExists) {
+        // 恢復之前的 session 和對話
+        selectSession(savedSessionId);
+        scrollToBottom();
+      } else if (sessions.value.length > 0) {
+        // 選擇第一個可用的 session
+        selectSession(sessions.value[0].sessionId);
+      } else {
+        // 沒有任何 session，建立新的
+        await createNewSession();
+      }
     });
 
     return {

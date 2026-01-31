@@ -22,7 +22,7 @@ public class ChatController : ControllerBase
     {
         try
         {
-            var sessionId = await _copilotService.CreateSessionAsync(request.Model ?? "claude-sonnet-4.5");
+            var sessionId = await _copilotService.CreateSessionAsync(request.Model ?? "claude-sonnet-4.5", "web");
             var status = _copilotService.GetSessionStatus(sessionId);
             return Ok(new SessionInfo
             {
@@ -116,9 +116,9 @@ public class ChatController : ControllerBase
     }
 
     [HttpGet("sessions/status")]
-    public ActionResult<List<SessionStatusInfo>> GetSessionStatuses()
+    public ActionResult<List<SessionStatusInfo>> GetSessionStatuses([FromQuery] string? channel = "web")
     {
-        return Ok(_copilotService.GetSessionStatuses());
+        return Ok(_copilotService.GetSessionStatuses(channel));
     }
 
     [HttpGet("session/{sessionId}")]

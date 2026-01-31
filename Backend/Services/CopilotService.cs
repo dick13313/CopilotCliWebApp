@@ -47,7 +47,7 @@ public class CopilotService : IDisposable
         }
     }
 
-    public async Task<string> CreateSessionAsync(string model = "claude-sonnet-4.5")
+    public async Task<string> CreateSessionAsync(string model = "claude-sonnet-4.5", string channel = "web")
     {
         if (_client == null)
         {
@@ -65,11 +65,12 @@ public class CopilotService : IDisposable
         {
             SessionId = session.SessionId,
             Model = model,
+            Channel = channel,
             CreatedAt = DateTime.UtcNow,
             LastUpdatedAt = DateTime.UtcNow,
             Status = "idle"
         };
-        _logger.LogInformation("Created session: {SessionId}", session.SessionId);
+        _logger.LogInformation("Created session: {SessionId} for channel: {Channel}", session.SessionId, channel);
         
         return session.SessionId;
     }
@@ -143,6 +144,15 @@ public class CopilotService : IDisposable
                         });
                         completionSource.TrySetException(new Exception(err.Data.Message));
                         break;
+
+                    case SessionModelChangeEvent modelChange:
+                        _logger.LogInformation("Session {SessionId} model changed to {Model}", sessionId, modelChange.Data.NewModel);
+                        UpdateSessionState(sessionId, state =>
+                        {
+                            state.Model = modelChange.Data.NewModel;
+                            state.LastUpdatedAt = DateTime.UtcNow;
+                        });
+                        break;
                 }
             }
             catch (Exception ex)
@@ -199,13 +209,17 @@ public class CopilotService : IDisposable
             throw new InvalidOperationException($"Session {sessionId} not found");
         }
 
+        // 發送 /model 命令切換 model
         await SendMessageAsync(sessionId, $"/model {model}");
-        _logger.LogInformation("Session {SessionId} switched model to {Model}", sessionId, model);
+        
+        // 確保 state 立即反映新的 model（不等待 SessionModelChangeEvent）
         UpdateSessionState(sessionId, state =>
         {
             state.Model = model;
             state.LastUpdatedAt = DateTime.UtcNow;
         });
+        
+        _logger.LogInformation("Session {SessionId} model switched to {Model}", sessionId, model);
     }
 
     public List<string> GetActiveSessions()
@@ -213,9 +227,14 @@ public class CopilotService : IDisposable
         return _sessions.Keys.ToList();
     }
 
-    public List<SessionStatusInfo> GetSessionStatuses()
+    public List<SessionStatusInfo> GetSessionStatuses(string? channel = null)
     {
-        return _sessionStates.Values
+        var query = _sessionStates.Values.AsEnumerable();
+        if (!string.IsNullOrEmpty(channel))
+        {
+            query = query.Where(s => s.Channel.Equals(channel, StringComparison.OrdinalIgnoreCase));
+        }
+        return query
             .OrderByDescending(s => s.LastUpdatedAt)
             .Select(MapSessionStatus)
             .ToList();
@@ -398,6 +417,7 @@ public class CopilotService : IDisposable
             SessionId = state.SessionId,
             Model = state.Model,
             Status = state.Status,
+            Channel = state.Channel,
             CreatedAt = state.CreatedAt,
             LastUpdatedAt = state.LastUpdatedAt,
             LastPrompt = state.LastPrompt,
@@ -423,6 +443,7 @@ public class CopilotService : IDisposable
         public string SessionId { get; set; } = string.Empty;
         public string Model { get; set; } = "claude-sonnet-4.5";
         public string Status { get; set; } = "idle";
+        public string Channel { get; set; } = "web";
         public DateTime CreatedAt { get; set; }
         public DateTime LastUpdatedAt { get; set; }
         public string? LastPrompt { get; set; }

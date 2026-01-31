@@ -260,7 +260,7 @@ public class TelegramChannel : IChatChannel
             _activeSessions.TryRemove(chatId, out _);
         }
 
-        var newSessionId = await _copilotService.CreateSessionAsync(_options.DefaultModel);
+        var newSessionId = await _copilotService.CreateSessionAsync(_options.DefaultModel, "telegram");
         _chatSessions[chatId] = newSessionId;
         _activeSessions[chatId] = newSessionId;
         return newSessionId;
@@ -392,7 +392,7 @@ public class TelegramChannel : IChatChannel
     private string BuildSessionListReply(long chatId)
     {
         var activeSessionId = _activeSessions.TryGetValue(chatId, out var active) ? active : null;
-        var sessions = _copilotService.GetSessionStatuses();
+        var sessions = _copilotService.GetSessionStatuses("telegram");
         if (sessions.Count == 0)
         {
             return "尚無任何 session，請使用 /session new 建立。";
@@ -425,7 +425,7 @@ public class TelegramChannel : IChatChannel
 
     private async Task<string> CreateAndUseSessionAsync(long chatId)
     {
-        var newSessionId = await _copilotService.CreateSessionAsync(_options.DefaultModel);
+        var newSessionId = await _copilotService.CreateSessionAsync(_options.DefaultModel, "telegram");
         _chatSessions[chatId] = newSessionId;
         _activeSessions[chatId] = newSessionId;
         return $"✅ 已建立並切換到新 session: {newSessionId}";
@@ -433,7 +433,7 @@ public class TelegramChannel : IChatChannel
 
     private async Task<string> CreateSessionOnlyAsync()
     {
-        return await _copilotService.CreateSessionAsync(_options.DefaultModel);
+        return await _copilotService.CreateSessionAsync(_options.DefaultModel, "telegram");
     }
 
     private async Task<string> HandleUseCommandAsync(long chatId, string prompt)
@@ -580,7 +580,7 @@ public class TelegramChannel : IChatChannel
         }
 
         var trimmed = input.Trim();
-        var sessions = _copilotService.GetSessionStatuses();
+        var sessions = _copilotService.GetSessionStatuses("telegram");
         if (int.TryParse(trimmed, out var index))
         {
             if (index >= 1 && index <= sessions.Count)
